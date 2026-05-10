@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>전일 상승종목 스캐너</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Malgun Gothic', sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+.header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.header h1 { font-size: 17px; font-weight: 600; color: #58a6ff; }
+.header span { font-size: 12px; color: #8b949e; }
+.scan-btn { padding: 10px 24px; background: #238636; border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; font-family: inherit; font-weight: 600; }
+.scan-btn:hover { background: #2ea043; }
+.scan-btn:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+.main { padding: 16px 20px; max-width: 1100px; margin: 0 auto; }
+.loading { text-align: center; padding: 60px 20px; }
+.spinner { width: 40px; height: 40px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading p { color: #8b949e; font-size: 14px; margin-top: 8px; }
+.loading .sub { font-size: 12px; color: #6e7681; margin-top: 6px; }
+
+/* AI 박스 */
+.ai-box { background: #161b22; border: 1px solid #1f6feb; border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+.ai-box .ai-title { font-size: 13px; color: #58a6ff; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.ai-summary { font-size: 14px; color: #e6edf3; margin-bottom: 14px; line-height: 1.7; }
+.ai-picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.ai-pick { background: #0d1117; border: 1px solid #238636; border-radius: 8px; padding: 12px; }
+.ai-pick .pick-name { font-size: 14px; font-weight: 600; color: #3fb950; margin-bottom: 6px; }
+.ai-pick .pick-reason { font-size: 12px; color: #e6edf3; line-height: 1.6; margin-bottom: 6px; }
+.ai-pick .pick-risk { font-size: 11px; color: #f85149; }
+.ai-caution { margin-top: 12px; font-size: 12px; color: #d29922; background: #272115; padding: 8px 12px; border-radius: 6px; border-left: 3px solid #d29922; }
+
+/* 요약 카드 */
+.summary-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.sum-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 120px; }
+.sum-card .label { font-size: 11px; color: #8b949e; margin-bottom: 6px; }
+.sum-card .value { font-size: 20px; font-weight: 600; color: #e6edf3; }
+
+/* 종목 테이블 */
+.table-wrap { background: #161b22; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.table-wrap h3 { font-size: 13px; color: #8b949e; padding: 14px 16px; border-bottom: 1px solid #30363d; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { padding: 10px 12px; text-align: left; color: #8b949e; font-weight: 500; font-size: 11px; border-bottom: 1px solid #21262d; background: #0d1117; white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #1c2128; }
+.up { color: #f85149; font-weight: 600; }
+.down { color: #58a6ff; }
+.score-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.score-high { background: #1a3a1a; color: #3fb950; }
+.score-mid { background: #2d2a1a; color: #d29922; }
+.score-low { background: #2d1a1a; color: #f85149; }
+.signal-tag { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; margin: 1px; }
+.tag-buy { background: #1a3a1a; color: #3fb950; }
+.tag-warn { background: #2d1a1a; color: #f85149; }
+.tag-neutral { background: #21262d; color: #8b949e; }
+.empty { text-align: center; padding: 40px; color: #8b949e; font-size: 14px; }
+.disclaimer { font-size: 11px; color: #6e7681; padding: 16px 0; line-height: 1.7; text-align: center; }
+
+@media (max-width: 600px) {
+  th:nth-child(n+6), td:nth-child(n+6) { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📡 전일 상승종목 스캐너</h1>
+    <span id="baseDate">KOSPI + KOSDAQ 전체 · 종합점수 기반 추천</span>
+  </div>
+  <button class="scan-btn" id="scanBtn" onclick="startScan()">🔍 스캔 시작</button>
+</div>
+
+<div class="main">
+  <div id="loadingArea" style="display:none;">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p id="loadingMsg">전일 상승종목 스캔 중...</p>
+      <p class="sub">KOSPI + KOSDAQ 전체 종목을 분석합니다. 3~5분 소요됩니다.</p>
+    </div>
+  </div>
+
+  <div id="resultArea" style="display:none;">
+    <!-- 요약 -->
+    <div class="summary-row">
+      <div class="sum-card"><div class="label">기준일</div><div class="value" id="sumDate" style="font-size:14px;">-</div></div>
+      <div class="sum-card"><div class="label">전체 상승종목</div><div class="value up" id="sumTotal">-</div></div>
+      <div class="sum-card"><div class="label">분석 종목</div><div class="value" id="sumAnalyzed">-</div></div>
+      <div class="sum-card"><div class="label">최고 상승률</div><div class="value up" id="sumTop">-</div></div>
+    </div>
+
+    <!-- AI 분석 -->
+    <div class="ai-box" id="aiBox" style="display:none;">
+      <div class="ai-title">🤖 AI 단기매매 분석</div>
+      <div class="ai-summary" id="aiSummary"></div>
+      <div class="ai-picks" id="aiPicks"></div>
+      <div class="ai-caution" id="aiCaution"></div>
+    </div>
+
+    <!-- 종목 테이블 -->
+    <div class="table-wrap">
+      <h3>📊 종합점수 TOP 20 — 상승률 40% + 기술신호 40% + 거래량 20%</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>순위</th>
+            <th>종목명</th>
+            <th>시장</th>
+            <th>종가</th>
+            <th>상승률</th>
+            <th>시가총액</th>
+            <th>거래량배수</th>
+            <th>RSI</th>
+            <th>MA신호</th>
+            <th>기술점수</th>
+            <th>종합점수</th>
+          </tr>
+        </thead>
+        <tbody id="stockTable"></tbody>
+      </table>
+    </div>
+
+    <div class="disclaimer">
+      ⚠️ 본 정보는 투자 권유가 아닙니다. 단기매매는 원금 손실 위험이 있으며 투자 판단은 반드시 본인 책임 하에 하시기 바랍니다.
+    </div>
+  </div>
+
+  <div id="emptyArea" style="text-align:center;padding:60px 20px;color:#8b949e;">
+    <div style="font-size:40px;margin-bottom:16px;">📡</div>
+    <div style="font-size:16px;font-weight:600;color:#e6edf3;margin-bottom:8px;">스캔 버튼을 눌러주세요</div>
+    <div style="font-size:13px;">전일 KOSPI+KOSDAQ 상승종목을 자동 분석합니다</div>
+  </div>
+</div>
+
+<script>
+function startScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 스캔 중...';
+  document.getElementById('emptyArea').style.display = 'none';
+  document.getElementById('resultArea').style.display = 'none';
+  document.getElementById('loadingArea').style.display = 'block';
+
+  const msgs = [
+    '전일 상승종목 스캔 중...',
+    'KOSPI 종목 분석 중...',
+    'KOSDAQ 종목 분석 중...',
+    '기술적 지표 계산 중...',
+    'AI 분석 중...',
+  ];
+  let mi = 0;
+  const interval = setInterval(() => {
+    document.getElementById('loadingMsg').textContent = msgs[mi % msgs.length];
+    mi++;
+  }, 15000);
+
+  fetch('/api/scan')
+    .then(r => r.json())
+    .then(res => {
+      clearInterval(interval);
+      document.getElementById('loadingArea').style.display = 'none';
+      if (res.error) {
+        alert(res.error);
+        btn.disabled = false;
+        btn.textContent = '🔍 스캔 시작';
+        document.getElementById('emptyArea').style.display = 'block';
+        return;
+      }
+      renderResult(res);
+      btn.disabled = false;
+      btn.textContent = '🔄 다시 스캔';
+    })
+    .catch(e => {
+      clearInterval(interval);
+      alert('스캔 실패: ' + e);
+      btn.disabled = false;
+      btn.textContent = '🔍 스캔 시작';
+      document.getElementById('loadingArea').style.display = 'none';
+      document.getElementById('emptyArea').style.display = 'block';
+    });
+}
+
+function renderResult(res) {
+  document.getElementById('resultArea').style.display = 'block';
+  document.getElementById('sumDate').textContent = res.base_date;
+  document.getElementById('sumTotal').textContent = res.total_count + '개';
+  document.getElementById('sumAnalyzed').textContent = res.stocks.length + '개';
+  const top = res.stocks[0];
+  document.getElementById('sumTop').textContent = top ? '+' + top.change_pct + '%' : '-';
+
+  // AI 박스
+  if (res.ai) {
+    const ai = res.ai;
+    document.getElementById('aiBox').style.display = 'block';
+    document.getElementById('aiSummary').textContent = ai.market_summary || '';
+
+    const picks = (ai.top_picks || []).map(p => `
+      <div class="ai-pick">
+        <div class="pick-name">⭐ ${p.name} (${p.code})</div>
+        <div class="pick-reason">${p.reason}</div>
+        <div class="pick-risk">⚠️ ${p.risk}</div>
+      </div>`).join('');
+    document.getElementById('aiPicks').innerHTML = picks;
+    document.getElementById('aiCaution').textContent = '📌 ' + (ai.caution || '');
+  }
+
+  // 종목 테이블
+  const tbody = document.getElementById('stockTable');
+  tbody.innerHTML = res.stocks.map((s, i) => {
+    const sig = s.signals || {};
+    const scoreClass = s.total_score >= 70 ? 'score-high' : s.total_score >= 50 ? 'score-mid' : 'score-low';
+    const techClass = s.tech_score >= 70 ? 'score-high' : s.tech_score >= 50 ? 'score-mid' : 'score-low';
+
+    const maTag = sig.ma_signal ? `<span class="signal-tag ${sig.ma_signal.includes('골든') ? 'tag-buy' : sig.ma_signal.includes('데드') ? 'tag-warn' : 'tag-neutral'}">${sig.ma_signal}</span>` : '-';
+    const volStr = sig.vol_ratio ? sig.vol_ratio + '배' : '-';
+    const rsiStr = sig.rsi ? sig.rsi : '-';
+    const rsiClass = sig.rsi < 30 ? 'up' : sig.rsi > 70 ? 'tag-warn' : '';
+
+    const capStr = s.market_cap_str || 'N/A';
+    const capColor = s.market_cap_억 >= 10000 ? '#58a6ff' : s.market_cap_억 >= 1000 ? '#e6edf3' : '#8b949e';
+    return `<tr>
+      <td style="color:#8b949e;">${i+1}</td>
+      <td style="font-weight:600;">${s.name}</td>
+      <td style="font-size:11px;color:#8b949e;">${s.market}</td>
+      <td>${s.close.toLocaleString()}원</td>
+      <td class="up">+${s.change_pct}%</td>
+      <td style="font-size:11px;color:${capColor};">${capStr}</td>
+      <td style="color:${sig.vol_ratio >= 2 ? '#d29922' : '#e6edf3'}">${volStr}</td>
+      <td class="${rsiClass}">${rsiStr}</td>
+      <td>${maTag}</td>
+      <td><span class="score-badge ${techClass}">${s.tech_score}</span></td>
+      <td><span class="score-badge ${scoreClass}">${s.total_score}</span></td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

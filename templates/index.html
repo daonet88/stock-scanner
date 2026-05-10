@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>키움증권 종목 평가</title>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.27.0/plotly.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic', sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+
+  .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+  .header h1 { font-size: 18px; font-weight: 600; color: #58a6ff; }
+  .header span { font-size: 12px; color: #8b949e; }
+
+  .search-area { padding: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .search-area input { flex: 1; min-width: 200px; padding: 10px 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; font-size: 15px; outline: none; }
+  .search-area input:focus { border-color: #58a6ff; }
+  .search-area button { padding: 10px 22px; background: #238636; border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .search-area button:hover { background: #2ea043; }
+
+  .chips { padding: 0 20px 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { padding: 5px 14px; background: #21262d; border: 1px solid #30363d; border-radius: 20px; font-size: 12px; color: #8b949e; cursor: pointer; }
+  .chip:hover { background: #30363d; color: #e6edf3; }
+
+  .main { padding: 0 20px 20px; }
+
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .info-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; }
+  .info-card .label { font-size: 11px; color: #8b949e; margin-bottom: 6px; }
+  .info-card .value { font-size: 18px; font-weight: 600; }
+  .info-card .sub { font-size: 11px; color: #8b949e; margin-top: 4px; }
+
+  .up { color: #f85149; }
+  .down { color: #58a6ff; }
+  .neutral { color: #8b949e; }
+
+  .score-bar-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .score-bar-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; }
+  .score-bar-card .label { font-size: 12px; color: #8b949e; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .bar-bg { background: #21262d; border-radius: 4px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+
+  .chart-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { padding: 6px 16px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; color: #8b949e; cursor: pointer; }
+  .tab.active { background: #1f6feb; border-color: #58a6ff; color: #fff; }
+
+  .period-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .ptab { padding: 4px 12px; background: #21262d; border: 1px solid #30363d; border-radius: 6px; font-size: 12px; color: #8b949e; cursor: pointer; }
+  .ptab.active { background: #238636; border-color: #2ea043; color: #fff; }
+
+  .chart-box { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  #mainChart, #subChart { width: 100%; }
+
+  .supply-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .supply-card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 14px; text-align: center; }
+  .supply-card .s-label { font-size: 11px; color: #8b949e; margin-bottom: 8px; }
+  .supply-card .s-value { font-size: 20px; font-weight: 600; }
+  .supply-card .s-dir { font-size: 12px; margin-top: 4px; }
+
+  .opinion-box { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .opinion-box h3 { font-size: 13px; color: #8b949e; margin-bottom: 10px; }
+  .opinion-box p { font-size: 14px; line-height: 1.8; color: #e6edf3; }
+
+  .loading { text-align: center; padding: 60px 20px; color: #8b949e; }
+  .spinner { width: 32px; height: 32px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none; }
+  .disclaimer { font-size: 11px; color: #6e7681; padding: 16px 0; border-top: 1px solid #21262d; line-height: 1.7; }
+
+  @media (max-width: 480px) {
+    .header h1 { font-size: 15px; }
+    .info-card .value { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>📈</div>
+  <h1>키움증권 종목 평가</h1>
+  <span>pykrx 실시간 데이터 기반</span>
+</div>
+
+<div class="search-area">
+  <input type="text" id="searchInput" placeholder="종목명 또는 종목코드 입력 (예: 삼성전자, 005930)" />
+  <button onclick="doSearch()">🔍 평가하기</button>
+</div>
+
+<div class="chips">
+  <span style="font-size:12px;color:#8b949e;align-self:center;">빠른선택:</span>
+  <span class="chip" onclick="quickSearch('삼성전자')">삼성전자</span>
+  <span class="chip" onclick="quickSearch('SK하이닉스')">SK하이닉스</span>
+  <span class="chip" onclick="quickSearch('NAVER')">NAVER</span>
+  <span class="chip" onclick="quickSearch('카카오')">카카오</span>
+  <span class="chip" onclick="quickSearch('현대차')">현대차</span>
+  <span class="chip" onclick="quickSearch('셀트리온')">셀트리온</span>
+  <span class="chip" onclick="quickSearch('LG에너지솔루션')">LG에너지솔루션</span>
+</div>
+
+<div class="main">
+  <div id="loadingArea" class="loading hidden">
+    <div class="spinner"></div>
+    <div id="loadingText">데이터 수집 중...</div>
+  </div>
+
+  <div id="resultArea" class="hidden">
+
+    <!-- 종목 헤더 -->
+    <div style="margin-bottom:16px;padding:16px;background:#161b22;border:1px solid #30363d;border-radius:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-size:20px;font-weight:700;" id="stockName">-</div>
+        <div style="font-size:13px;color:#8b949e;margin-top:4px;" id="stockMeta">-</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:26px;font-weight:700;" id="currentPrice">-</div>
+        <div style="font-size:14px;margin-top:4px;" id="priceChange">-</div>
+      </div>
+    </div>
+
+    <!-- 핵심 지표 -->
+    <div class="info-grid" id="infoGrid"></div>
+
+    <!-- 점수 바 -->
+    <div class="score-bar-wrap" id="scoreBars"></div>
+
+    <!-- 차트 -->
+    <div class="chart-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <div class="chart-tabs">
+          <div class="tab active" onclick="setSubChart('rsi', this)">RSI</div>
+          <div class="tab" onclick="setSubChart('macd', this)">MACD</div>
+          <div class="tab" onclick="setSubChart('volume', this)">거래량</div>
+        </div>
+        <div class="period-tabs">
+          <div class="ptab" onclick="setPeriod(30, this)">1개월</div>
+          <div class="ptab active" onclick="setPeriod(90, this)">3개월</div>
+          <div class="ptab" onclick="setPeriod(180, this)">6개월</div>
+          <div class="ptab" onclick="setPeriod(365, this)">1년</div>
+        </div>
+      </div>
+      <div id="mainChart"></div>
+      <div id="subChart" style="margin-top:8px;"></div>
+    </div>
+
+    <!-- 수급 -->
+    <div class="supply-grid" id="supplyGrid"></div>
+
+    <!-- 의견 -->
+    <div class="opinion-box">
+      <h3>📊 키움 HTS 기준 종합 의견</h3>
+      <p id="opinionText">-</p>
+    </div>
+
+    <div class="disclaimer">
+      ⚠️ 본 서비스는 pykrx를 통해 KRX 공개 데이터를 활용하며, 투자 권유가 아닙니다. 실제 투자 결정은 반드시 본인 판단 하에 하시기 바랍니다.
+    </div>
+  </div>
+</div>
+
+<script>
+let currentCode = '';
+let chartData = [];
+let indicators = {};
+let currentSub = 'rsi';
+let currentPeriod = 90;
+
+function quickSearch(name) {
+  document.getElementById('searchInput').value = name;
+  doSearch();
+}
+
+function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+
+  document.getElementById('loadingArea').classList.remove('hidden');
+  document.getElementById('resultArea').classList.add('hidden');
+  document.getElementById('loadingText').textContent = `${q} 데이터 수집 중... (10~30초 소요)`;
+
+  fetch(`/api/search?q=${encodeURIComponent(q)}`)
+    .then(r => r.json())
+    .then(res => {
+      if (res.error) {
+        alert(res.error);
+        document.getElementById('loadingArea').classList.add('hidden');
+        return;
+      }
+      currentCode = res.info.code;
+      renderInfo(res.info);
+      loadChart();
+    })
+    .catch(() => {
+      alert('데이터 수집 실패. 잠시 후 다시 시도하세요.');
+      document.getElementById('loadingArea').classList.add('hidden');
+    });
+}
+
+function renderInfo(info) {
+  document.getElementById('stockName').textContent = `${info.name}`;
+  document.getElementById('stockMeta').textContent = `${info.code} · 시가총액 ${info.market_cap}`;
+
+  const priceEl = document.getElementById('currentPrice');
+  const changeEl = document.getElementById('priceChange');
+  priceEl.textContent = info.current_price.toLocaleString() + '원';
+  const sign = info.change >= 0 ? '+' : '';
+  const cls = info.change >= 0 ? 'up' : 'down';
+  changeEl.innerHTML = `<span class="${cls}">${sign}${info.change.toLocaleString()}원 (${sign}${info.change_pct}%)</span>`;
+
+  const grid = document.getElementById('infoGrid');
+  const metrics = [
+    { label: '시가', value: info.open.toLocaleString() + '원' },
+    { label: '고가', value: info.high.toLocaleString() + '원', cls: 'up' },
+    { label: '저가', value: info.low.toLocaleString() + '원', cls: 'down' },
+    { label: '거래량', value: (info.volume / 1000).toFixed(0) + 'K주' },
+    { label: 'PER', value: info.per > 0 ? info.per + '배' : 'N/A' },
+    { label: 'PBR', value: info.pbr > 0 ? info.pbr + '배' : 'N/A' },
+    { label: '배당수익률', value: info.div_yield > 0 ? info.div_yield + '%' : 'N/A' },
+    { label: '52주 최고', value: info.high_52.toLocaleString() + '원', cls: 'up' },
+    { label: '52주 최저', value: info.low_52.toLocaleString() + '원', cls: 'down' },
+  ];
+  grid.innerHTML = metrics.map(m => `
+    <div class="info-card">
+      <div class="label">${m.label}</div>
+      <div class="value ${m.cls || ''}">${m.value}</div>
+    </div>`).join('');
+
+  // 52주 위치 바
+  const bars = document.getElementById('scoreBars');
+  const pos = info.pos_52;
+  const posColor = pos > 70 ? '#f85149' : pos > 40 ? '#d29922' : '#3fb950';
+  bars.innerHTML = `
+    <div class="score-bar-card">
+      <div class="label"><span>52주 고저가 위치</span><span style="color:#e6edf3;font-weight:600;">${pos}%</span></div>
+      <div class="bar-bg"><div class="bar-fill" style="width:0%;background:${posColor}" data-target="${pos}"></div></div>
+    </div>`;
+
+  // 수급
+  const fg = info.foreign_net;
+  const ig = info.inst_net;
+  document.getElementById('supplyGrid').innerHTML = `
+    <div class="supply-card">
+      <div class="s-label">외국인 순매수</div>
+      <div class="s-value ${fg >= 0 ? 'up' : 'down'}">${(Math.abs(fg) / 100000000).toFixed(1)}억</div>
+      <div class="s-dir ${fg >= 0 ? 'up' : 'down'}">${fg >= 0 ? '▲ 순매수' : '▼ 순매도'}</div>
+    </div>
+    <div class="supply-card">
+      <div class="s-label">기관 순매수</div>
+      <div class="s-value ${ig >= 0 ? 'up' : 'down'}">${(Math.abs(ig) / 100000000).toFixed(1)}억</div>
+      <div class="s-dir ${ig >= 0 ? 'up' : 'down'}">${ig >= 0 ? '▲ 순매수' : '▼ 순매도'}</div>
+    </div>`;
+
+  // 종합의견
+  const score = pos;
+  const perOk = info.per > 0 && info.per < 20;
+  let opinion = `${info.name}은(는) 현재 52주 가격 범위 내 ${pos}% 위치에 있습니다. `;
+  opinion += perOk ? `PER ${info.per}배로 밸류에이션이 양호합니다. ` : `PER ${info.per > 0 ? info.per + '배' : 'N/A'}로 확인이 필요합니다. `;
+  opinion += fg > 0 ? `외국인이 순매수 중으로 수급이 긍정적입니다. ` : `외국인이 순매도 중으로 수급에 주의가 필요합니다. `;
+  opinion += ig > 0 ? `기관도 순매수로 기관 수급이 우호적입니다.` : `기관은 순매도 중입니다. 차트 흐름을 함께 확인하세요.`;
+  document.getElementById('opinionText').textContent = opinion;
+
+  setTimeout(() => {
+    document.querySelectorAll('.bar-fill').forEach(el => {
+      el.style.width = el.dataset.target + '%';
+    });
+  }, 100);
+}
+
+function loadChart() {
+  document.getElementById('loadingText').textContent = '차트 데이터 로딩 중...';
+  fetch(`/api/chart?code=${currentCode}&period=${currentPeriod}`)
+    .then(r => r.json())
+    .then(res => {
+      document.getElementById('loadingArea').classList.add('hidden');
+      document.getElementById('resultArea').classList.remove('hidden');
+      if (res.error) return;
+      chartData = res.data;
+      indicators = res.indicators;
+      renderMainChart();
+      renderSubChart(currentSub);
+    });
+}
+
+function renderMainChart() {
+  const dates = chartData.map(d => d.date);
+  const candlestick = {
+    type: 'candlestick',
+    x: dates,
+    open: chartData.map(d => d.open),
+    high: chartData.map(d => d.high),
+    low: chartData.map(d => d.low),
+    close: chartData.map(d => d.close),
+    increasing: { line: { color: '#f85149' } },
+    decreasing: { line: { color: '#58a6ff' } },
+    name: '주가',
+  };
+
+  const traces = [candlestick];
+  const maColors = { ma5: '#ffa657', ma20: '#79c0ff', ma60: '#7ee787', ma120: '#ff7b72' };
+  const maNames = { ma5: 'MA5', ma20: 'MA20', ma60: 'MA60', ma120: 'MA120' };
+  for (const key of ['ma5', 'ma20', 'ma60', 'ma120']) {
+    traces.push({
+      type: 'scatter', mode: 'lines',
+      x: dates, y: indicators[key],
+      line: { color: maColors[key], width: 1.5 },
+      name: maNames[key],
+    });
+  }
+
+  Plotly.newPlot('mainChart', traces, {
+    paper_bgcolor: '#161b22', plot_bgcolor: '#161b22',
+    font: { color: '#e6edf3', family: 'Malgun Gothic', size: 11 },
+    xaxis: { gridcolor: '#21262d', showgrid: true, rangeslider: { visible: false } },
+    yaxis: { gridcolor: '#21262d', showgrid: true, side: 'right' },
+    margin: { l: 10, r: 60, t: 10, b: 30 },
+    legend: { orientation: 'h', y: 1.05, font: { size: 11 } },
+    height: 320,
+  }, { responsive: true, displayModeBar: false });
+}
+
+function renderSubChart(type) {
+  currentSub = type;
+  const dates = indicators.dates || chartData.map(d => d.date);
+  let traces = [], layout = {};
+
+  const baseLayout = {
+    paper_bgcolor: '#161b22', plot_bgcolor: '#161b22',
+    font: { color: '#e6edf3', family: 'Malgun Gothic', size: 11 },
+    xaxis: { gridcolor: '#21262d' },
+    margin: { l: 10, r: 60, t: 10, b: 30 },
+    height: 160,
+    showlegend: false,
+  };
+
+  if (type === 'rsi') {
+    traces = [{
+      type: 'scatter', mode: 'lines',
+      x: dates, y: indicators.rsi,
+      line: { color: '#d2a8ff', width: 2 }, name: 'RSI',
+    }];
+    layout = { ...baseLayout, yaxis: { gridcolor: '#21262d', range: [0, 100], side: 'right',
+      tickvals: [30, 50, 70],
+    }, shapes: [
+      { type: 'line', x0: dates[0], x1: dates[dates.length-1], y0: 70, y1: 70, line: { color: '#f85149', width: 1, dash: 'dot' } },
+      { type: 'line', x0: dates[0], x1: dates[dates.length-1], y0: 30, y1: 30, line: { color: '#58a6ff', width: 1, dash: 'dot' } },
+    ]};
+  } else if (type === 'macd') {
+    traces = [
+      { type: 'scatter', mode: 'lines', x: dates, y: indicators.macd, line: { color: '#79c0ff', width: 1.5 }, name: 'MACD' },
+      { type: 'scatter', mode: 'lines', x: dates, y: indicators.signal, line: { color: '#ffa657', width: 1.5 }, name: 'Signal' },
+      { type: 'bar', x: dates, y: indicators.histogram, marker: { color: indicators.histogram?.map(v => v >= 0 ? '#3fb950' : '#f85149') }, name: 'Histogram' },
+    ];
+    layout = { ...baseLayout, yaxis: { gridcolor: '#21262d', side: 'right' }, showlegend: true,
+      legend: { orientation: 'h', y: 1.1, font: { size: 10 } } };
+  } else if (type === 'volume') {
+    traces = [{
+      type: 'bar', x: chartData.map(d => d.date),
+      y: chartData.map(d => d.volume),
+      marker: { color: chartData.map(d => d.close >= d.open ? '#f85149' : '#58a6ff') },
+      name: '거래량',
+    }];
+    layout = { ...baseLayout, yaxis: { gridcolor: '#21262d', side: 'right' } };
+  }
+
+  Plotly.newPlot('subChart', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+function setSubChart(type, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderSubChart(type);
+}
+
+function setPeriod(period, el) {
+  currentPeriod = period;
+  document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  if (currentCode) loadChart();
+}
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+</script>
+</body>
+</html>
