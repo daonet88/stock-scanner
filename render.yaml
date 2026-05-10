@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: stock-scanner
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn scanner:app --bind 0.0.0.0:$PORT
+    plan: free
