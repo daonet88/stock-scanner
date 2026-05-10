@@ -136,44 +136,51 @@ body { font-family: 'Noto Sans KR', sans-serif; background: #0a0e1a; color: #e2e
 </div>
 
 <script>
-const CORS_PROXY = 'https://corsproxy.io/?';
+// 여러 CORS 프록시 순서대로 시도
+const PROXIES = [
+  'https://api.allorigins.win/raw?url=',
+  'https://corsproxy.io/?url=',
+  'https://cors-anywhere.herokuapp.com/',
+];
 
-async function fetchNaverEuckr(url) {
-  // EUC-KR 인코딩 처리
-  const res = await fetch(CORS_PROXY + encodeURIComponent(url));
-  const buf = await res.arrayBuffer();
-  const decoder = new TextDecoder('euc-kr');
-  return decoder.decode(buf);
+async function fetchWithProxy(url) {
+  for (const proxy of PROXIES) {
+    try {
+      const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) });
+      if (res.ok) return res;
+    } catch(e) { continue; }
+  }
+  throw new Error('모든 프록시 실패');
+}
+
+async function naverJson(url) {
+  const res = await fetchWithProxy(url);
+  return res.json();
 }
 
 async function getNaverRise(sosok, pages = 5) {
+  // 네이버 모바일 JSON API 사용 - 인코딩 문제 없음
   const results = [];
   const seen = new Set();
+  const market = sosok === 0 ? 'KOSPI' : 'KOSDAQ';
+
   for (let page = 1; page <= pages; page++) {
     try {
-      const url = `https://finance.naver.com/sise/sise_rise.naver?sosok=${sosok}&page=${page}`;
-      const text = await fetchNaverEuckr(url);
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(text, 'text/html');
-      const rows = doc.querySelectorAll('table.type_2 tr');
+      const url = `https://m.stock.naver.com/api/sise/market/rise?market=${market}&page=${page}&pageSize=40`;
+      const data = await naverJson(url);
+      const items = data.stocks || data.items || data.result?.stocks || [];
+      if (!items.length) break;
       let found = 0;
-      rows.forEach(row => {
-        const nameTag = row.querySelector('a.tltle');
-        if (!nameTag) return;
+      items.forEach(item => {
         try {
-          const name = nameTag.textContent.trim();
-          const href = nameTag.getAttribute('href') || '';
-          const code = href.split('code=')[1]?.slice(0, 6) || '';
-          if (!code || seen.has(code)) return;
-          const tds = row.querySelectorAll('td');
-          if (tds.length < 6) return;
-          const close = parseInt(tds[2].textContent.replace(/,/g,'')) || 0;
-          const chgText = tds[4].textContent.replace(/[,%+\s]/g,'');
-          const chg = parseFloat(chgText) || 0;
-          const vol = parseInt(tds[5].textContent.replace(/,/g,'')) || 0;
-          if (close <= 0 || chg <= 0) return;
+          const code = item.itemCode || item.code || '';
+          const name = item.stockName || item.name || '';
+          const close = parseInt(String(item.closePrice||item.close||0).replace(/,/g,'')) || 0;
+          const chg = parseFloat(item.fluctuationsRatio||item.changeRate||0) || 0;
+          const vol = parseInt(String(item.accumulatedTradingVolume||item.volume||0).replace(/,/g,'')) || 0;
+          if (!code || seen.has(code) || close <= 0 || chg <= 0) return;
           seen.add(code);
-          results.push({ code, name, market: sosok==0?'KOSPI':'KOSDAQ', close, change_pct: chg, volume: vol });
+          results.push({ code, name, market, close, change_pct: Math.abs(chg), volume: vol });
           found++;
         } catch(e) {}
       });
@@ -186,11 +193,7 @@ async function getNaverRise(sosok, pages = 5) {
 async function getStockDetail(code) {
   try {
     const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
-    const res = await fetch(CORS_PROXY + encodeURIComponent(url), {
-      headers: { 'Accept': 'application/json', 'x-cors-api-key': 'temp_key' }
-    });
-    const text = await res.text();
-    const data = JSON.parse(text);
+    const data = await naverJson(url);
     const infos = data.totalInfos || [];
     let cap_str = 'N/A', cap_억 = 0, per = 0, pbr = 0, div = 0;
     const toNum = s => parseFloat(String(s).replace(/[^0-9.]/g,'')) || 0;
@@ -218,7 +221,7 @@ async function getStockDetail(code) {
 async function getChartData(code) {
   try {
     const url = `https://fchart.stock.naver.com/sise.nhn?symbol=${code}&timeframe=day&count=120&requestType=0`;
-    const res = await fetchNaver(url);
+    const res = await fetchWithProxy(url);
     const text = await res.text();
     const parser = new DOMParser();
     const doc = parser.parseFromString(text, 'text/xml');
