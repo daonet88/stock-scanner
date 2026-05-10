@@ -138,11 +138,12 @@ body { font-family: 'Noto Sans KR', sans-serif; background: #0a0e1a; color: #e2e
 <script>
 const CORS_PROXY = 'https://corsproxy.io/?';
 
-async function fetchNaver(url) {
-  const res = await fetch(CORS_PROXY + encodeURIComponent(url), {
-    headers: { 'User-Agent': 'Mozilla/5.0' }
-  });
-  return res;
+async function fetchNaverEuckr(url) {
+  // EUC-KR 인코딩 처리
+  const res = await fetch(CORS_PROXY + encodeURIComponent(url));
+  const buf = await res.arrayBuffer();
+  const decoder = new TextDecoder('euc-kr');
+  return decoder.decode(buf);
 }
 
 async function getNaverRise(sosok, pages = 5) {
@@ -151,8 +152,7 @@ async function getNaverRise(sosok, pages = 5) {
   for (let page = 1; page <= pages; page++) {
     try {
       const url = `https://finance.naver.com/sise/sise_rise.naver?sosok=${sosok}&page=${page}`;
-      const res = await fetchNaver(url);
-      const text = await res.text();
+      const text = await fetchNaverEuckr(url);
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, 'text/html');
       const rows = doc.querySelectorAll('table.type_2 tr');
@@ -186,8 +186,11 @@ async function getNaverRise(sosok, pages = 5) {
 async function getStockDetail(code) {
   try {
     const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
-    const res = await fetch(CORS_PROXY + encodeURIComponent(url));
-    const data = await res.json();
+    const res = await fetch(CORS_PROXY + encodeURIComponent(url), {
+      headers: { 'Accept': 'application/json', 'x-cors-api-key': 'temp_key' }
+    });
+    const text = await res.text();
+    const data = JSON.parse(text);
     const infos = data.totalInfos || [];
     let cap_str = 'N/A', cap_억 = 0, per = 0, pbr = 0, div = 0;
     const toNum = s => parseFloat(String(s).replace(/[^0-9.]/g,'')) || 0;
