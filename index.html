@@ -137,8 +137,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: #0a0e1a; color: #e2e
 
 <script>
 async function fetchWithProxy(url) {
-  // allorigins: 네이버 API 접근 가능한 프록시
-  const proxy = 'https://api.allorigins.win/raw?url=';
+  const proxy = 'https://naver-proxy.daonet2026.workers.dev/?url=';
   const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error('프록시 오류: ' + res.status);
   return res;
